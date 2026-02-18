@@ -493,6 +493,13 @@ def admin_add_validator(hotkey: str, network: str, rpc_url: str, contract: str, 
         return
 
     print_network_header(network_name, contract_addr)
+    console.print(
+        Panel(
+            f'[cyan]Validator Hotkey:[/cyan] {hotkey}',
+            title='Add Validator',
+            border_style='blue',
+        )
+    )
 
     try:
         import bittensor as bt
@@ -584,6 +591,13 @@ def admin_remove_validator(
         return
 
     print_network_header(network_name, contract_addr)
+    console.print(
+        Panel(
+            f'[cyan]Validator Hotkey:[/cyan] {hotkey}',
+            title='Remove Validator',
+            border_style='red',
+        )
+    )
 
     try:
         import bittensor as bt
