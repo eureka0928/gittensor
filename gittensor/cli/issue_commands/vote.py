@@ -10,6 +10,7 @@ Commands:
     gitt vote list
 """
 
+import json
 import re
 
 import click
@@ -19,6 +20,9 @@ from rich.table import Table
 from .helpers import (
     console,
     get_contract_address,
+    print_error,
+    print_network_header,
+    print_success,
     resolve_network,
     validate_issue_id,
     validate_ss58_address,
@@ -57,12 +61,6 @@ def vote():
     """Validator consensus operations.
 
     These commands are used by validators to manage issue bounty payouts.
-
-    \b
-    Commands:
-        solution   Vote for a solver on an active issue
-        cancel     Vote to cancel an issue
-        list       List whitelisted validators
     """
     pass
 
@@ -137,17 +135,20 @@ def val_vote_solution(
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         return
 
     try:
         pr_number = parse_pr_number(pr_number_or_url)
     except ValueError as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr}[/dim]')
+    if pr_number < 1:
+        print_error(f'PR number must be >= 1 (got {pr_number})')
+        return
+
+    print_network_header(network_name, contract_addr)
     console.print(
         Panel(
             f'[cyan]Issue ID:[/cyan] {issue_id}\n'
@@ -179,13 +180,13 @@ def val_vote_solution(
             result = client.vote_solution(issue_id, solver_hotkey, solver_coldkey, pr_number, wallet)
 
         if result:
-            console.print('[green]Solution vote submitted![/green]')
+            print_success('Solution vote submitted!')
         else:
-            console.print('[red]Vote failed.[/red]')
+            print_error('Vote failed.')
     except ImportError as e:
-        console.print(f'[red]Error: Missing dependency - {e}[/red]')
+        print_error(f'Missing dependency - {e}')
     except Exception as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
 
 
 @vote.command('cancel')
@@ -250,14 +251,13 @@ def val_vote_cancel_issue(
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr}[/dim]')
+    print_network_header(network_name, contract_addr)
     console.print(
         Panel(
-            f'[cyan]Issue ID:[/cyan] {issue_id}\n' f'[cyan]Reason:[/cyan] {reason}',
+            f'[cyan]Issue ID:[/cyan] {issue_id}\n[cyan]Reason:[/cyan] {reason}',
             title='Vote Cancel Issue',
             border_style='blue',
         )
@@ -283,13 +283,13 @@ def val_vote_cancel_issue(
             result = client.vote_cancel_issue(issue_id, reason, wallet)
 
         if result:
-            console.print('[green]Vote cancel submitted![/green]')
+            print_success('Vote cancel submitted!')
         else:
-            console.print('[red]Vote cancel failed.[/red]')
+            print_error('Vote cancel failed.')
     except ImportError as e:
-        console.print(f'[red]Error: Missing dependency - {e}[/red]')
+        print_error(f'Missing dependency - {e}')
     except Exception as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
 
 
 @vote.command('list')
@@ -310,7 +310,8 @@ def val_vote_cancel_issue(
     default='',
     help='Contract address (uses config if empty)',
 )
-def vote_list_validators(network: str, rpc_url: str, contract: str):
+@click.option('--json', 'output_json', is_flag=True, help='Output raw JSON for scripting')
+def vote_list_validators(network: str, rpc_url: str, contract: str, output_json: bool):
     """List whitelisted validators and consensus threshold.
 
     Shows all validator hotkeys that are authorized to vote on
@@ -320,16 +321,18 @@ def vote_list_validators(network: str, rpc_url: str, contract: str):
     Examples:
         gitt vote list
         gitt vote list --network test
+        gitt vote list --json
     """
     contract_addr = get_contract_address(contract)
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr}[/dim]\n')
+    if not output_json:
+        print_network_header(network_name, contract_addr)
+        console.print()
 
     try:
         import bittensor as bt
@@ -350,6 +353,19 @@ def vote_list_validators(network: str, rpc_url: str, contract: str):
         n = len(validators)
         required = (n // 2) + 1
 
+        if output_json:
+            click.echo(
+                json.dumps(
+                    {
+                        'validators': validators,
+                        'count': n,
+                        'consensus_threshold': required,
+                    },
+                    indent=2,
+                )
+            )
+            return
+
         if validators:
             table = Table(show_header=True, header_style='bold magenta')
             table.add_column('#', style='dim', justify='right')
@@ -366,6 +382,6 @@ def vote_list_validators(network: str, rpc_url: str, contract: str):
             console.print('[dim]Add validators with: gitt admin add-vali <HOTKEY>[/dim]')
 
     except ImportError as e:
-        console.print(f'[red]Error: Missing dependency - {e}[/red]')
+        print_error(f'Missing dependency - {e}')
     except Exception as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
