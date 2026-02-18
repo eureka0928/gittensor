@@ -12,6 +12,7 @@ Commands:
 """
 
 import json
+from decimal import Decimal
 
 import click
 from rich.panel import Panel
@@ -19,6 +20,7 @@ from rich.table import Table
 
 from .helpers import (
     ALPHA_SCALE,
+    STATUS_COLORS,
     _read_contract_packed_storage,
     _read_issues_from_child_storage,
     colorize_status,
@@ -92,6 +94,9 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
 
     # JSON output mode
     if output_json:
+        for issue in issues:
+            issue['bounty_alpha'] = format_alpha(issue.get('bounty_amount', 0), 4)
+            issue['target_alpha'] = format_alpha(issue.get('target_bounty', 0), 4)
         click.echo(json.dumps(issues, indent=2))
         return
 
@@ -109,7 +114,8 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
                     f'[cyan]Bounty Amount:[/cyan] {format_alpha(issue["bounty_amount"], 4)}\n'
                     f'[cyan]Target Bounty:[/cyan] {format_alpha(issue["target_bounty"], 4)}\n'
                     f'[cyan]Fill %:[/cyan] {fill_pct:.1f}%\n'
-                    f'[cyan]Status:[/cyan] {issue["status"]}',
+                    f'[cyan]Status:[/cyan] [{STATUS_COLORS.get(str(issue["status"]), "white")}]'
+                    f'{issue["status"]}[/{STATUS_COLORS.get(str(issue["status"]), "white")}]',
                     title=f'Issue #{issue_id}',
                     border_style='green',
                 )
@@ -137,16 +143,14 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
             target_raw = issue.get('target_bounty', 0)
             status = issue.get('status', 'unknown')
 
-            try:
-                bounty = float(bounty_raw) / ALPHA_SCALE if bounty_raw else 0.0
-                target = float(target_raw) / ALPHA_SCALE if target_raw else 0.0
-            except (ValueError, TypeError):
-                bounty = 0.0
-                target = 0.0
+            # Format bounty pool display with fill percentage.
+            # Use Decimal for precision; omit " ALPHA" suffix since the
+            # column header already implies the unit.
+            bounty = Decimal(bounty_raw) / ALPHA_SCALE if bounty_raw else Decimal(0)
+            target = Decimal(target_raw) / ALPHA_SCALE if target_raw else Decimal(0)
 
-            # Format bounty pool display with fill percentage
             if target > 0:
-                fill_pct = (bounty / target) * 100
+                fill_pct = float(bounty / target * 100)
                 if fill_pct >= 100:
                     bounty_display = f'{bounty:.1f} (100%)'
                 elif bounty > 0:
@@ -236,7 +240,16 @@ def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool,
         total_bounty_pool = sum(issue.get('bounty_amount', 0) for issue in issues)
 
         if output_json:
-            click.echo(json.dumps({'bounty_pool': total_bounty_pool, 'issue_count': len(issues)}))
+            click.echo(
+                json.dumps(
+                    {
+                        'bounty_pool': total_bounty_pool,
+                        'bounty_pool_alpha': format_alpha(total_bounty_pool, 4),
+                        'issue_count': len(issues),
+                    },
+                    indent=2,
+                )
+            )
             return
 
         console.print(
@@ -328,9 +341,13 @@ def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: b
                 json.dumps(
                     {
                         'treasury_stake': treasury_stake,
+                        'treasury_stake_alpha': format_alpha(treasury_stake, 4),
                         'allocated_bounties': total_bounty_pool,
+                        'allocated_bounties_alpha': format_alpha(total_bounty_pool, 4),
                         'pending_harvest': pending_harvest,
-                    }
+                        'pending_harvest_alpha': format_alpha(pending_harvest, 4),
+                    },
+                    indent=2,
                 )
             )
             return
