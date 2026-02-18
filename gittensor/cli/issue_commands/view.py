@@ -16,25 +16,20 @@ import json
 import click
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from .helpers import (
     ALPHA_SCALE,
     _read_contract_packed_storage,
     _read_issues_from_child_storage,
+    colorize_status,
     console,
     format_alpha,
     get_contract_address,
+    print_error,
+    print_network_header,
     read_issues_from_contract,
     resolve_network,
 )
-
-STATUS_COLORS = {
-    'Active': 'green',
-    'Registered': 'yellow',
-    'Completed': 'dim',
-    'Cancelled': 'dim',
-}
 
 
 @click.command('list')
@@ -81,13 +76,13 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         console.print('[dim]Set via: gitt config set contract_address <ADDR>[/dim]')
         return
 
     if not output_json:
-        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-        console.print(f'[dim]Contract: {contract_addr[:20]}...[/dim]\n')
+        print_network_header(network_name, contract_addr)
+        console.print()
 
     if verbose:
         issues = read_issues_from_contract(ws_endpoint, contract_addr, verbose)
@@ -135,7 +130,7 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
 
     if issues:
         for issue in issues:
-            issue_id = issue.get('id', '?')
+            iid = issue.get('id', '?')
             repo = issue.get('repository_full_name', '?')
             num = issue.get('issue_number', '?')
             bounty_raw = issue.get('bounty_amount', 0)
@@ -170,11 +165,10 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
                 status = str(status)
 
             # Color-code status
-            color = STATUS_COLORS.get(status, 'white')
-            status_text = Text(status, style=color)
+            status_text = colorize_status(status)
 
             table.add_row(
-                str(issue_id),
+                str(iid),
                 repo,
                 f'#{num}',
                 bounty_display,
@@ -222,12 +216,11 @@ def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool,
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         return
 
     if not output_json:
-        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-        console.print(f'[dim]Contract: {contract_addr}[/dim]')
+        print_network_header(network_name, contract_addr)
 
     try:
         from substrateinterface import SubstrateInterface
@@ -251,7 +244,7 @@ def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool,
         )
         console.print(f'[dim]Sum of bounty amounts from {len(issues)} issue(s)[/dim]')
     except Exception as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
 
 
 @click.command('pending-harvest')
@@ -288,12 +281,11 @@ def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: b
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         return
 
     if not output_json:
-        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-        console.print(f'[dim]Contract: {contract_addr}[/dim]')
+        print_network_header(network_name, contract_addr)
 
     try:
         import bittensor as bt
@@ -347,9 +339,9 @@ def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: b
         console.print(f'[green]Allocated to Bounties:[/green] {format_alpha(total_bounty_pool, 4)}')
         console.print(f'[green]Pending Harvest:[/green] {format_alpha(pending_harvest, 4)}')
     except ImportError as e:
-        console.print(f'[red]Error: Missing dependency - {e}[/red]')
+        print_error(f'Missing dependency - {e}')
     except Exception as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
 
 
 @click.command('info')
@@ -388,12 +380,11 @@ def admin_info(network: str, rpc_url: str, contract: str, verbose: bool, output_
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
     if not contract_addr:
-        console.print('[red]Error: Contract address not configured.[/red]')
+        print_error('Contract address not configured.')
         return
 
     if not output_json:
-        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-        console.print(f'[dim]Contract: {contract_addr}[/dim]')
+        print_network_header(network_name, contract_addr)
 
     try:
         from substrateinterface import SubstrateInterface
@@ -424,4 +415,4 @@ def admin_info(network: str, rpc_url: str, contract: str, verbose: bool, output_
         else:
             console.print('[yellow]Could not read contract configuration.[/yellow]')
     except Exception as e:
-        console.print(f'[red]Error: {e}[/red]')
+        print_error(str(e))
