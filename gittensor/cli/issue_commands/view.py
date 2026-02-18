@@ -11,18 +11,30 @@ Commands:
     gitt admin info
 """
 
+import json
+
 import click
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from .helpers import (
+    ALPHA_SCALE,
     _read_contract_packed_storage,
     _read_issues_from_child_storage,
     console,
+    format_alpha,
     get_contract_address,
     read_issues_from_contract,
     resolve_network,
 )
+
+STATUS_COLORS = {
+    'Active': 'green',
+    'Registered': 'yellow',
+    'Completed': 'dim',
+    'Cancelled': 'dim',
+}
 
 
 @click.command('list')
@@ -51,7 +63,8 @@ from .helpers import (
     help='Contract address (uses default if empty)',
 )
 @click.option('--verbose', '-v', is_flag=True, help='Show debug output for contract reads')
-def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbose: bool):
+@click.option('--json', 'output_json', is_flag=True, help='Output raw JSON for scripting')
+def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbose: bool, output_json: bool):
     """
     List issues or view a specific issue.
 
@@ -72,24 +85,35 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
         console.print('[dim]Set via: gitt config set contract_address <ADDR>[/dim]')
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr[:20]}...[/dim]\n')
+    if not output_json:
+        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
+        console.print(f'[dim]Contract: {contract_addr[:20]}...[/dim]\n')
 
-    issues = read_issues_from_contract(ws_endpoint, contract_addr, verbose)
+    if verbose:
+        issues = read_issues_from_contract(ws_endpoint, contract_addr, verbose)
+    else:
+        with console.status('Reading issues from contract...', spinner='dots'):
+            issues = read_issues_from_contract(ws_endpoint, contract_addr, verbose)
+
+    # JSON output mode
+    if output_json:
+        click.echo(json.dumps(issues, indent=2))
+        return
 
     # Single issue detail view
     if issue_id is not None:
         issue = next((i for i in issues if i['id'] == issue_id), None)
 
         if issue:
+            fill_pct = (issue['bounty_amount'] / issue['target_bounty'] * 100) if issue['target_bounty'] > 0 else 0
             console.print(
                 Panel(
                     f'[cyan]ID:[/cyan] {issue["id"]}\n'
                     f'[cyan]Repository:[/cyan] {issue["repository_full_name"]}\n'
                     f'[cyan]Issue Number:[/cyan] #{issue["issue_number"]}\n'
-                    f'[cyan]Bounty Amount:[/cyan] {issue["bounty_amount"] / 1e9:.4f} ALPHA\n'
-                    f'[cyan]Target Bounty:[/cyan] {issue["target_bounty"] / 1e9:.4f} ALPHA\n'
-                    f'[cyan]Fill %:[/cyan] {(issue["bounty_amount"] / issue["target_bounty"] * 100) if issue["target_bounty"] > 0 else 0:.1f}%\n'
+                    f'[cyan]Bounty Amount:[/cyan] {format_alpha(issue["bounty_amount"], 4)}\n'
+                    f'[cyan]Target Bounty:[/cyan] {format_alpha(issue["target_bounty"], 4)}\n'
+                    f'[cyan]Fill %:[/cyan] {fill_pct:.1f}%\n'
                     f'[cyan]Status:[/cyan] {issue["status"]}',
                     title=f'Issue #{issue_id}',
                     border_style='green',
@@ -107,7 +131,7 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
     table.add_column('Repository', style='green')
     table.add_column('Issue #', style='yellow', justify='right')
     table.add_column('Bounty Pool', style='magenta', justify='right')
-    table.add_column('Status', style='blue')
+    table.add_column('Status')
 
     if issues:
         for issue in issues:
@@ -119,8 +143,8 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
             status = issue.get('status', 'unknown')
 
             try:
-                bounty = float(bounty_raw) / 1_000_000_000 if bounty_raw else 0.0
-                target = float(target_raw) / 1_000_000_000 if target_raw else 0.0
+                bounty = float(bounty_raw) / ALPHA_SCALE if bounty_raw else 0.0
+                target = float(target_raw) / ALPHA_SCALE if target_raw else 0.0
             except (ValueError, TypeError):
                 bounty = 0.0
                 target = 0.0
@@ -145,12 +169,16 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
             else:
                 status = str(status)
 
+            # Color-code status
+            color = STATUS_COLORS.get(status, 'white')
+            status_text = Text(status, style=color)
+
             table.add_row(
                 str(issue_id),
                 repo,
                 f'#{num}',
                 bounty_display,
-                status,
+                status_text,
             )
         console.print(table)
         console.print(f'\n[dim]Showing {len(issues)} issue(s)[/dim]')
@@ -179,8 +207,17 @@ def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbos
     help='Contract address (uses config if empty)',
 )
 @click.option('--verbose', '-v', is_flag=True, help='Show debug output')
-def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool):
-    """View total bounty pool (sum of all issue bounty amounts)."""
+@click.option('--json', 'output_json', is_flag=True, help='Output raw JSON for scripting')
+def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool, output_json: bool):
+    """
+    View total bounty pool (sum of all issue bounty amounts).
+
+    \b
+    Examples:
+        gitt issues bounty-pool
+        gitt issues bounty-pool --network test
+        gitt issues bounty-pool --json
+    """
     contract_addr = get_contract_address(contract)
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
@@ -188,18 +225,29 @@ def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool)
         console.print('[red]Error: Contract address not configured.[/red]')
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr}[/dim]')
+    if not output_json:
+        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
+        console.print(f'[dim]Contract: {contract_addr}[/dim]')
 
     try:
         from substrateinterface import SubstrateInterface
 
-        substrate = SubstrateInterface(url=ws_endpoint)
-        issues = _read_issues_from_child_storage(substrate, contract_addr, verbose)
+        if verbose:
+            substrate = SubstrateInterface(url=ws_endpoint)
+            issues = _read_issues_from_child_storage(substrate, contract_addr, verbose)
+        else:
+            with console.status('Reading contract...', spinner='dots'):
+                substrate = SubstrateInterface(url=ws_endpoint)
+                issues = _read_issues_from_child_storage(substrate, contract_addr, verbose)
 
         total_bounty_pool = sum(issue.get('bounty_amount', 0) for issue in issues)
+
+        if output_json:
+            click.echo(json.dumps({'bounty_pool': total_bounty_pool, 'issue_count': len(issues)}))
+            return
+
         console.print(
-            f'[green]Issue Bounty Pool:[/green] {total_bounty_pool / 1e9:.4f} ALPHA ({total_bounty_pool} raw)'
+            f'[green]Issue Bounty Pool:[/green] {format_alpha(total_bounty_pool, 4)} ({total_bounty_pool} raw)'
         )
         console.print(f'[dim]Sum of bounty amounts from {len(issues)} issue(s)[/dim]')
     except Exception as e:
@@ -225,8 +273,17 @@ def issues_bounty_pool(network: str, rpc_url: str, contract: str, verbose: bool)
     help='Contract address (uses config if empty)',
 )
 @click.option('--verbose', '-v', is_flag=True, help='Show debug output')
-def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: bool):
-    """View pending harvest (treasury stake minus allocated bounties)."""
+@click.option('--json', 'output_json', is_flag=True, help='Output raw JSON for scripting')
+def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: bool, output_json: bool):
+    """
+    View pending harvest (treasury stake minus allocated bounties).
+
+    \b
+    Examples:
+        gitt issues pending-harvest
+        gitt issues pending-harvest --network test
+        gitt issues pending-harvest --json
+    """
     contract_addr = get_contract_address(contract)
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
@@ -234,8 +291,9 @@ def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: b
         console.print('[red]Error: Contract address not configured.[/red]')
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr}[/dim]')
+    if not output_json:
+        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
+        console.print(f'[dim]Contract: {contract_addr}[/dim]')
 
     try:
         import bittensor as bt
@@ -246,24 +304,48 @@ def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: b
         )
 
         # Get treasury stake
-        subtensor = bt.Subtensor(network=ws_endpoint)
-        client = IssueCompetitionContractClient(
-            contract_address=contract_addr,
-            subtensor=subtensor,
-        )
-        treasury_stake = client.get_treasury_stake()
+        if verbose:
+            subtensor = bt.Subtensor(network=ws_endpoint)
+            client = IssueCompetitionContractClient(
+                contract_address=contract_addr,
+                subtensor=subtensor,
+            )
+            treasury_stake = client.get_treasury_stake()
+            substrate = SubstrateInterface(url=ws_endpoint)
+            issues = _read_issues_from_child_storage(substrate, contract_addr, verbose)
+        else:
+            with console.status('Connecting to subtensor...', spinner='dots'):
+                subtensor = bt.Subtensor(network=ws_endpoint)
+                client = IssueCompetitionContractClient(
+                    contract_address=contract_addr,
+                    subtensor=subtensor,
+                )
 
-        # Get total bounty pool (sum of all issue bounty amounts)
-        substrate = SubstrateInterface(url=ws_endpoint)
-        issues = _read_issues_from_child_storage(substrate, contract_addr, verbose)
+            with console.status('Reading contract state...', spinner='dots'):
+                treasury_stake = client.get_treasury_stake()
+                substrate = SubstrateInterface(url=ws_endpoint)
+                issues = _read_issues_from_child_storage(substrate, contract_addr, verbose)
+
         total_bounty_pool = sum(issue.get('bounty_amount', 0) for issue in issues)
 
         # Pending harvest = treasury stake - allocated bounties
         pending_harvest = max(0, treasury_stake - total_bounty_pool)
 
-        console.print(f'[green]Treasury Stake:[/green] {treasury_stake / 1e9:.4f} ALPHA')
-        console.print(f'[green]Allocated to Bounties:[/green] {total_bounty_pool / 1e9:.4f} ALPHA')
-        console.print(f'[green]Pending Harvest:[/green] {pending_harvest / 1e9:.4f} ALPHA')
+        if output_json:
+            click.echo(
+                json.dumps(
+                    {
+                        'treasury_stake': treasury_stake,
+                        'allocated_bounties': total_bounty_pool,
+                        'pending_harvest': pending_harvest,
+                    }
+                )
+            )
+            return
+
+        console.print(f'[green]Treasury Stake:[/green] {format_alpha(treasury_stake, 4)}')
+        console.print(f'[green]Allocated to Bounties:[/green] {format_alpha(total_bounty_pool, 4)}')
+        console.print(f'[green]Pending Harvest:[/green] {format_alpha(pending_harvest, 4)}')
     except ImportError as e:
         console.print(f'[red]Error: Missing dependency - {e}[/red]')
     except Exception as e:
@@ -289,8 +371,19 @@ def issues_pending_harvest(network: str, rpc_url: str, contract: str, verbose: b
     help='Contract address (uses config if empty)',
 )
 @click.option('--verbose', '-v', is_flag=True, help='Show debug output')
-def admin_info(network: str, rpc_url: str, contract: str, verbose: bool):
-    """View contract configuration."""
+@click.option('--json', 'output_json', is_flag=True, help='Output raw JSON for scripting')
+def admin_info(network: str, rpc_url: str, contract: str, verbose: bool, output_json: bool):
+    """
+    View contract configuration.
+
+    Shows the contract owner, treasury hotkey, netuid, and next issue ID.
+
+    \b
+    Examples:
+        gitt admin info
+        gitt admin info --network test
+        gitt admin info --json
+    """
     contract_addr = get_contract_address(contract)
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
@@ -298,17 +391,26 @@ def admin_info(network: str, rpc_url: str, contract: str, verbose: bool):
         console.print('[red]Error: Contract address not configured.[/red]')
         return
 
-    console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
-    console.print(f'[dim]Contract: {contract_addr}[/dim]')
-    console.print('[dim]Reading config...[/dim]\n')
+    if not output_json:
+        console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
+        console.print(f'[dim]Contract: {contract_addr}[/dim]')
 
     try:
         from substrateinterface import SubstrateInterface
 
-        substrate = SubstrateInterface(url=ws_endpoint)
-        packed = _read_contract_packed_storage(substrate, contract_addr, verbose)
+        if verbose:
+            substrate = SubstrateInterface(url=ws_endpoint)
+            packed = _read_contract_packed_storage(substrate, contract_addr, verbose)
+        else:
+            with console.status('Reading contract configuration...', spinner='dots'):
+                substrate = SubstrateInterface(url=ws_endpoint)
+                packed = _read_contract_packed_storage(substrate, contract_addr, verbose)
 
         if packed:
+            if output_json:
+                click.echo(json.dumps(packed, indent=2))
+                return
+
             console.print(
                 Panel(
                     f'[cyan]Owner:[/cyan] {packed.get("owner", "N/A")}\n'
