@@ -13,12 +13,15 @@ Commands:
 import re
 
 import click
+from rich.panel import Panel
 from rich.table import Table
 
 from .helpers import (
     console,
     get_contract_address,
     resolve_network,
+    validate_issue_id,
+    validate_ss58_address,
 )
 
 
@@ -125,6 +128,11 @@ def val_vote_solution(
         gitt vote solution 1 5Hxxx... 5Hyyy... 123
         gitt vote solution 1 5Hxxx... 5Hyyy... https://github.com/.../pull/123
     """
+    # Validate inputs
+    validate_issue_id(issue_id, 'issue ID')
+    validate_ss58_address(solver_hotkey, 'solver hotkey')
+    validate_ss58_address(solver_coldkey, 'solver coldkey')
+
     contract_addr = get_contract_address(contract)
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
@@ -140,10 +148,16 @@ def val_vote_solution(
 
     console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
     console.print(f'[dim]Contract: {contract_addr}[/dim]')
-    console.print(f'[yellow]Voting on solution for issue {issue_id}...[/yellow]\n')
-    console.print(f'  Solver Hotkey:  {solver_hotkey}')
-    console.print(f'  Solver Coldkey: {solver_coldkey}')
-    console.print(f'  PR Number: {pr_number}\n')
+    console.print(
+        Panel(
+            f'[cyan]Issue ID:[/cyan] {issue_id}\n'
+            f'[cyan]Solver Hotkey:[/cyan] {solver_hotkey}\n'
+            f'[cyan]Solver Coldkey:[/cyan] {solver_coldkey}\n'
+            f'[cyan]PR Number:[/cyan] {pr_number}',
+            title='Vote Solution',
+            border_style='blue',
+        )
+    )
 
     try:
         import bittensor as bt
@@ -153,13 +167,17 @@ def val_vote_solution(
         )
 
         wallet = bt.Wallet(name=wallet_name, hotkey=wallet_hotkey)
-        subtensor = bt.Subtensor(network=ws_endpoint)
-        client = IssueCompetitionContractClient(
-            contract_address=contract_addr,
-            subtensor=subtensor,
-        )
 
-        result = client.vote_solution(issue_id, solver_hotkey, solver_coldkey, pr_number, wallet)
+        with console.status('Connecting to subtensor...', spinner='dots'):
+            subtensor = bt.Subtensor(network=ws_endpoint)
+            client = IssueCompetitionContractClient(
+                contract_address=contract_addr,
+                subtensor=subtensor,
+            )
+
+        with console.status('Submitting solution vote...', spinner='dots'):
+            result = client.vote_solution(issue_id, solver_hotkey, solver_coldkey, pr_number, wallet)
+
         if result:
             console.print('[green]Solution vote submitted![/green]')
         else:
@@ -225,6 +243,9 @@ def val_vote_cancel_issue(
         gitt vote cancel 1 "External solution found"
         gitt vote cancel 42 "Issue invalid"
     """
+    # Validate inputs
+    validate_issue_id(issue_id, 'issue ID')
+
     contract_addr = get_contract_address(contract)
     ws_endpoint, network_name = resolve_network(network, rpc_url)
 
@@ -234,8 +255,13 @@ def val_vote_cancel_issue(
 
     console.print(f'[dim]Network: {network_name} ({ws_endpoint})[/dim]')
     console.print(f'[dim]Contract: {contract_addr}[/dim]')
-    console.print(f'[yellow]Voting to cancel issue {issue_id}...[/yellow]\n')
-    console.print(f'  Reason: {reason}\n')
+    console.print(
+        Panel(
+            f'[cyan]Issue ID:[/cyan] {issue_id}\n' f'[cyan]Reason:[/cyan] {reason}',
+            title='Vote Cancel Issue',
+            border_style='blue',
+        )
+    )
 
     try:
         import bittensor as bt
@@ -245,13 +271,17 @@ def val_vote_cancel_issue(
         )
 
         wallet = bt.Wallet(name=wallet_name, hotkey=wallet_hotkey)
-        subtensor = bt.Subtensor(network=ws_endpoint)
-        client = IssueCompetitionContractClient(
-            contract_address=contract_addr,
-            subtensor=subtensor,
-        )
 
-        result = client.vote_cancel_issue(issue_id, reason, wallet)
+        with console.status('Connecting to subtensor...', spinner='dots'):
+            subtensor = bt.Subtensor(network=ws_endpoint)
+            client = IssueCompetitionContractClient(
+                contract_address=contract_addr,
+                subtensor=subtensor,
+            )
+
+        with console.status('Submitting cancel vote...', spinner='dots'):
+            result = client.vote_cancel_issue(issue_id, reason, wallet)
+
         if result:
             console.print('[green]Vote cancel submitted![/green]')
         else:
@@ -308,13 +338,15 @@ def vote_list_validators(network: str, rpc_url: str, contract: str):
             IssueCompetitionContractClient,
         )
 
-        subtensor = bt.Subtensor(network=ws_endpoint)
-        client = IssueCompetitionContractClient(
-            contract_address=contract_addr,
-            subtensor=subtensor,
-        )
+        with console.status('Connecting to subtensor...', spinner='dots'):
+            subtensor = bt.Subtensor(network=ws_endpoint)
+            client = IssueCompetitionContractClient(
+                contract_address=contract_addr,
+                subtensor=subtensor,
+            )
 
-        validators = client.get_validators()
+        with console.status('Reading validators...', spinner='dots'):
+            validators = client.get_validators()
         n = len(validators)
         required = (n // 2) + 1
 
