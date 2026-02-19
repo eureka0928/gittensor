@@ -261,7 +261,7 @@ def admin_payout(issue_id: int, network: str, rpc_url: str, contract: str, walle
 @click.option(
     '--contract',
     default='',
-    help='Contract address',
+    help='Contract address (uses config if empty)',
 )
 @click.option(
     '--wallet-name',
@@ -352,7 +352,7 @@ def admin_set_owner(new_owner: str, network: str, rpc_url: str, contract: str, w
 @click.option(
     '--contract',
     default='',
-    help='Contract address',
+    help='Contract address (uses config if empty)',
 )
 @click.option(
     '--wallet-name',
@@ -452,7 +452,7 @@ def admin_set_treasury(
 @click.option(
     '--contract',
     default='',
-    help='Contract address',
+    help='Contract address (uses config if empty)',
 )
 @click.option(
     '--wallet-name',
@@ -550,7 +550,7 @@ def admin_add_validator(hotkey: str, network: str, rpc_url: str, contract: str, 
 @click.option(
     '--contract',
     default='',
-    help='Contract address',
+    help='Contract address (uses config if empty)',
 )
 @click.option(
     '--wallet-name',

@@ -66,7 +66,7 @@ from .helpers import (
 @click.option(
     '--contract',
     default='',
-    help='Contract address (uses default if empty)',
+    help='Contract address (uses config if empty)',
 )
 @click.option(
     '--wallet-name',
@@ -298,7 +298,7 @@ def issue_register(
     default='',
     help='Contract address (uses config if empty)',
 )
-@click.option('--verbose', '-v', is_flag=True, help='Show detailed output')
+@click.option('--verbose', '-v', is_flag=True, help='Show debug output')
 def issue_harvest(wallet_name: str, wallet_hotkey: str, network: str, rpc_url: str, contract: str, verbose: bool):
     """
     Manually trigger emission harvest from contract treasury.

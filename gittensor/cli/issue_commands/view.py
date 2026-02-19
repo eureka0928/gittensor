@@ -57,9 +57,9 @@ from .helpers import (
 @click.option(
     '--contract',
     default='',
-    help='Contract address (uses default if empty)',
+    help='Contract address (uses config if empty)',
 )
-@click.option('--verbose', '-v', is_flag=True, help='Show debug output for contract reads')
+@click.option('--verbose', '-v', is_flag=True, help='Show debug output')
 @click.option('--json', 'output_json', is_flag=True, help='Output raw JSON for scripting')
 def issues_list(issue_id: int, network: str, rpc_url: str, contract: str, verbose: bool, output_json: bool):
     """
