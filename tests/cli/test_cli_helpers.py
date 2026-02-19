@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from click.testing import CliRunner
 
 from gittensor.cli.issue_commands.helpers import (
     ALPHA_SCALE,
@@ -301,3 +302,115 @@ class TestColorizeStatus:
         assert 'Registered' in STATUS_COLORS
         assert 'Completed' in STATUS_COLORS
         assert 'Cancelled' in STATUS_COLORS
+
+
+# ============================================================================
+# CLI command integration tests (CliRunner)
+# ============================================================================
+
+
+class TestRegisterCommandValidation:
+    """Test that validators are properly wired into the register command."""
+
+    def test_register_rejects_bad_repo_format(self):
+        from gittensor.cli.issue_commands.mutations import issue_register
+
+        runner = CliRunner()
+        result = runner.invoke(
+            issue_register,
+            ['--repo', 'bad-repo-no-slash', '--issue', '1', '--bounty', '100'],
+        )
+        assert 'owner/repo format' in result.output
+
+    def test_register_rejects_below_minimum_bounty(self):
+        from gittensor.cli.issue_commands.mutations import issue_register
+
+        runner = CliRunner()
+        result = runner.invoke(
+            issue_register,
+            ['--repo', 'owner/repo', '--issue', '1', '--bounty', '5'],
+        )
+        assert 'at least 10 ALPHA' in result.output
+
+    def test_register_rejects_zero_bounty(self):
+        from gittensor.cli.issue_commands.mutations import issue_register
+
+        runner = CliRunner()
+        result = runner.invoke(
+            issue_register,
+            ['--repo', 'owner/repo', '--issue', '1', '--bounty', '0'],
+        )
+        assert 'at least 10 ALPHA' in result.output
+
+    def test_register_rejects_negative_bounty(self):
+        from gittensor.cli.issue_commands.mutations import issue_register
+
+        runner = CliRunner()
+        result = runner.invoke(
+            issue_register,
+            ['--repo', 'owner/repo', '--issue', '1', '--bounty', '-5'],
+        )
+        assert 'at least 10 ALPHA' in result.output
+
+
+class TestVoteCommandValidation:
+    """Test that validators are wired into vote commands."""
+
+    def test_vote_solution_rejects_bad_hotkey(self):
+        from gittensor.cli.issue_commands.vote import val_vote_solution
+
+        runner = CliRunner()
+        result = runner.invoke(
+            val_vote_solution,
+            ['1', 'bad-hotkey', 'bad-coldkey', '123'],
+        )
+        assert 'Invalid SS58 address' in result.output
+
+    def test_vote_cancel_rejects_zero_issue_id(self):
+        from gittensor.cli.issue_commands.vote import val_vote_cancel_issue
+
+        runner = CliRunner()
+        result = runner.invoke(
+            val_vote_cancel_issue,
+            ['0', 'some reason'],
+        )
+        assert '>= 1' in result.output
+
+
+class TestAdminCommandValidation:
+    """Test that validators are wired into admin commands."""
+
+    def test_cancel_rejects_zero_issue_id(self):
+        from gittensor.cli.issue_commands.admin import admin_cancel
+
+        runner = CliRunner()
+        result = runner.invoke(admin_cancel, ['0'])
+        assert '>= 1' in result.output
+
+    def test_set_owner_rejects_bad_address(self):
+        from gittensor.cli.issue_commands.admin import admin_set_owner
+
+        runner = CliRunner()
+        result = runner.invoke(admin_set_owner, ['not-valid-ss58'])
+        assert 'Invalid SS58 address' in result.output
+
+    def test_set_treasury_rejects_bad_address(self):
+        from gittensor.cli.issue_commands.admin import admin_set_treasury
+
+        runner = CliRunner()
+        result = runner.invoke(admin_set_treasury, ['not-valid-ss58'])
+        assert 'Invalid SS58 address' in result.output
+
+    def test_add_vali_rejects_bad_address(self):
+        from gittensor.cli.issue_commands.admin import admin_add_validator
+
+        runner = CliRunner()
+        result = runner.invoke(admin_add_validator, ['not-valid-ss58'])
+        assert 'Invalid SS58 address' in result.output
+
+    def test_remove_vali_rejects_bad_address(self):
+        from gittensor.cli.issue_commands.admin import admin_remove_validator
+
+        runner = CliRunner()
+        result = runner.invoke(admin_remove_validator, ['not-valid-ss58'])
+        assert 'Invalid SS58 address' in result.output
