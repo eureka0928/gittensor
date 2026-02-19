@@ -93,6 +93,11 @@ def validate_and_convert_bounty(bounty: float) -> int:
     Raises:
         click.BadParameter: If bounty is invalid
     """
+    import math
+
+    if not isinstance(bounty, (int, float)) or (isinstance(bounty, float) and not math.isfinite(bounty)):
+        raise click.BadParameter(f'Invalid bounty amount: {bounty}', param_hint='--bounty')
+
     try:
         d = Decimal(str(bounty))
     except (InvalidOperation, ValueError):

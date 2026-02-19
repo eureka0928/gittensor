@@ -85,6 +85,18 @@ class TestValidateAndConvertBounty:
         with pytest.raises(click.BadParameter, match='at least 10 ALPHA'):
             validate_and_convert_bounty(-50)
 
+    def test_bounty_inf(self):
+        with pytest.raises(click.BadParameter, match='Invalid bounty amount'):
+            validate_and_convert_bounty(float('inf'))
+
+    def test_bounty_negative_inf(self):
+        with pytest.raises(click.BadParameter, match='Invalid bounty amount'):
+            validate_and_convert_bounty(float('-inf'))
+
+    def test_bounty_nan(self):
+        with pytest.raises(click.BadParameter, match='Invalid bounty amount'):
+            validate_and_convert_bounty(float('nan'))
+
     def test_bounty_too_many_decimals(self):
         with pytest.raises(click.BadParameter, match='too many decimal places'):
             validate_and_convert_bounty(10.0000000001)

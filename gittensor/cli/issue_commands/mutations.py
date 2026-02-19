@@ -236,7 +236,7 @@ def issue_register(
                 console.print('  • Bounty too low (minimum 10 ALPHA)')
                 console.print('  • Invalid repository format (must be owner/repo)')
                 console.print('  • Caller is not the contract owner')
-                console.print('[dim]Use "gitt view issues" to check existing issues[/dim]')
+                console.print('[dim]Use "gitt issues list" to check existing issues[/dim]')
             elif error_info:
                 print_error(str(error_info))
 
@@ -261,7 +261,7 @@ def issue_register(
             console.print('  • Bounty too low (minimum 10 ALPHA)')
             console.print('  • Invalid repository format (must be owner/repo)')
             console.print('  • Caller is not the contract owner')
-            console.print('[dim]Use "gitt view issues" to check existing issues[/dim]')
+            console.print('[dim]Use "gitt issues list" to check existing issues[/dim]')
         else:
             print_error(f'Error registering issue: {e}')
 
