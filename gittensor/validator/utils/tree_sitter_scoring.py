@@ -138,6 +138,64 @@ def collect_node_signatures(
     return signatures
 
 
+# Similarity signatures: direction-tagged for copy detection
+# Full: ("add"|"del", "structural"|"leaf", node_type[, text])
+# Structural: ("add"|"del", node_type)
+SimilaritySignature = Tuple[str, ...]
+
+
+def build_change_similarity_signatures(
+    old_content: Optional[str],
+    new_content: Optional[str],
+    extension: str,
+    weights: TokenConfig,
+) -> Tuple[Counter[SimilaritySignature], Counter[SimilaritySignature], int]:
+    """Build shared similarity signatures from full old/new file contents.
+
+    Returns:
+        full_signatures:
+            Multiset of added/deleted structural and leaf node signatures.
+        structural_signatures:
+            Multiset of added/deleted structural node types only.
+        change_count:
+            Total changed node count used as a file-comparison weight.
+    """
+    language = weights.get_language(extension)
+    if not language:
+        return Counter(), Counter(), 0
+
+    old_signatures: Counter[NodeSignature] = Counter()
+    new_signatures: Counter[NodeSignature] = Counter()
+
+    if old_content:
+        old_tree = parse_code(old_content, language)
+        if old_tree:
+            old_signatures = collect_node_signatures(old_tree, weights)
+
+    if new_content:
+        new_tree = parse_code(new_content, language)
+        if new_tree:
+            new_signatures = collect_node_signatures(new_tree, weights)
+
+    added = new_signatures - old_signatures
+    deleted = old_signatures - new_signatures
+
+    full_signatures: Counter[SimilaritySignature] = Counter()
+    structural_signatures: Counter[SimilaritySignature] = Counter()
+
+    for direction, delta in (('add', added), ('del', deleted)):
+        for signature, count in delta.items():
+            full_key: SimilaritySignature = (direction, *signature)
+            full_signatures[full_key] += count
+
+            if signature[0] == 'structural':
+                structural_key: SimilaritySignature = (direction, signature[1])
+                structural_signatures[structural_key] += count
+
+    change_count = sum(added.values()) + sum(deleted.values())
+    return full_signatures, structural_signatures, change_count
+
+
 def score_tree_diff(
     old_content: Optional[str],
     new_content: Optional[str],

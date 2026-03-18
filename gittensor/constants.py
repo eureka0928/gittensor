@@ -166,3 +166,11 @@ PREDICTIONS_CONSENSUS_VARIANCE_TARGET = 0.2
 PREDICTIONS_COOLDOWN_SECONDS = 900  # 15 min cooldown per miner per PR re-prediction
 PREDICTIONS_MIN_VALUE = 0.0
 PREDICTIONS_MAX_VALUE = 1.0
+
+# =============================================================================
+# Copy Detection (tree-sitter AST comparison)
+# =============================================================================
+COPY_FULL_THRESHOLD = 0.90  # Full AST signatures (node types + leaf text)
+COPY_STRUCTURAL_THRESHOLD = 0.80  # Structural AST (node types only, catches renames)
+COPY_FILE_OVERLAP_THRESHOLD = 0.50
+COPY_MAX_GROUP_SIZE = 20

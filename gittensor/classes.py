@@ -1,16 +1,21 @@
+from __future__ import annotations
+
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from math import prod
-from typing import DefaultDict, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, DefaultDict, Dict, List, Optional, Set
 
 import bittensor as bt
 
 from gittensor.constants import MIN_TOKEN_SCORE_FOR_BASE_SCORE
 from gittensor.utils.utils import parse_repo_name
 from gittensor.validator.oss_contributions.tier_config import Tier, TierConfig, TierStats
+
+if TYPE_CHECKING:
+    from gittensor.utils.github_api_tools import FileContentPair
 
 GITHUB_DOMAIN = 'https://github.com/'
 
@@ -165,6 +170,10 @@ class PullRequest:
     changes_requested_count: int = 0  # Number of maintainer CHANGES_REQUESTED reviews
     raw_credibility: float = 1.0  # Before applying ^k scalar
     credibility_scalar: int = 1  # The k value from tier config
+    copy_penalty_multiplier: float = 1.0
+    copy_similarity_score: float = 0.0
+    copied_from_pr_number: Optional[int] = None
+    copied_from_repo: Optional[str] = None
     earned_score: float = 0.0
     collateral_score: float = 0.0  # For OPEN PRs: potential_score * collateral_percent
 
@@ -187,10 +196,15 @@ class PullRequest:
     last_edited_at: Optional[datetime] = None
     head_ref_oid: Optional[str] = None
     base_ref_oid: Optional[str] = None
+    file_contents: Optional[Dict[str, FileContentPair]] = None
 
     def set_file_changes(self, file_changes: List[FileChange]) -> None:
         """Set the file changes for this pull request"""
         self.file_changes = file_changes
+
+    def set_file_contents(self, file_contents: Dict[str, FileContentPair]) -> None:
+        """Set the file contents for this pull request"""
+        self.file_contents = file_contents
 
     def is_pioneer_eligible(self) -> bool:
         """Check if this PR qualifies for pioneer consideration.
@@ -213,17 +227,23 @@ class PullRequest:
             'decay': self.time_decay_multiplier,
             'cred': self.credibility_multiplier,
             'review': self.review_quality_multiplier,
+            'copy': self.copy_penalty_multiplier,
         }
 
         self.earned_score = self.base_score * prod(multipliers.values())
 
-        # Log all multipliers (credibility shows ^k format)
+        # Log all multipliers (credibility shows ^k format, copy shows similarity)
         def _format_multiplier(k: str, v: float) -> str:
             if k == 'cred':
                 return f'cred={self.raw_credibility:.2f}^{self.credibility_scalar}'
+            if k == 'copy' and v < 1.0:
+                return f'copy={v:.2f}(sim={self.copy_similarity_score:.2f})'
             return f'{k}={v:.2f}'
 
-        mult_str = ' × '.join(_format_multiplier(k, v) for k, v in multipliers.items())
+        # Omit copy=1.00 from log when no penalty (keeps log clean for normal PRs)
+        mult_str = ' × '.join(
+            _format_multiplier(k, v) for k, v in multipliers.items() if not (k == 'copy' and v == 1.0)
+        )
         bt.logging.info(
             f'├─ {self.pr_state.value} PR #{self.number} ({self.repository_full_name}) → {self.earned_score:.2f}'
         )
@@ -589,6 +609,7 @@ class MinerEvaluationCache:
             if pr.file_changes:
                 for fc in pr.file_changes:
                     fc.patch = None
+            pr.file_contents = None
 
         light_eval.github_pat = None
 
