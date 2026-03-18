@@ -141,6 +141,22 @@ async def issue_competitions(
                     )
                     continue
 
+                # Check if solver's PR was flagged as a copy
+                copy_results = getattr(self, '_copy_detection_results', {})
+                if pr_number and (pr_key := (issue.repository_full_name, pr_number)) in copy_results and copy_results[pr_key].is_copy:
+                    bt.logging.info(
+                        f'Solver PR#{pr_number} flagged as copy (similarity={copy_results[pr_key].similarity:.2f}), '
+                        f'voting cancel: {issue_label}'
+                    )
+                    success = contract_client.vote_cancel_issue(
+                        issue_id=issue.id,
+                        reason=f'Solver PR#{pr_number} detected as copy of PR#{copy_results[pr_key].original_pr_number}',
+                        wallet=self.wallet,
+                    )
+                    if success:
+                        cancels_cast += 1
+                    continue
+
                 bt.logging.info(
                     f'Voting solution: {issue_label} | PR#{pr_number}, solver={solver_github_id}, hotkey={miner_hotkey[:12]}...'
                 )
