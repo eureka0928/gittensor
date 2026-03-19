@@ -10,6 +10,10 @@ import bittensor as bt
 from gittensor.classes import MinerEvaluation
 from gittensor.utils.github_api_tools import check_github_issue_closed
 from gittensor.validator.issue_competitions.contract_client import IssueCompetitionContractClient, IssueStatus
+from gittensor.validator.issue_competitions.similarity import (
+    clear_pr_file_contents,
+    detect_cross_miner_copies,
+)
 from gittensor.validator.utils.config import GITTENSOR_VALIDATOR_PAT
 from gittensor.validator.utils.issue_competitions import (
     get_contract_address,
@@ -74,6 +78,10 @@ async def issue_competitions(
         )
         for github_id, hotkey in eligible_miners.items():
             bt.logging.info(f'  Eligible miner: github_id={github_id}, hotkey={hotkey[:12]}...')
+
+        # Detect cross-miner copying among open issue-bounty PRs
+        copy_results = detect_cross_miner_copies(miner_evaluations)
+        clear_pr_file_contents(miner_evaluations)
 
         # Get active issues from contract
         active_issues = contract_client.get_issues_by_status(IssueStatus.ACTIVE)
@@ -142,7 +150,6 @@ async def issue_competitions(
                     continue
 
                 # Check if solver's PR was flagged as a copy
-                copy_results = getattr(self, '_copy_detection_results', {})
                 if pr_number and (pr_key := (issue.repository_full_name, pr_number)) in copy_results and copy_results[pr_key].is_copy:
                     bt.logging.info(
                         f'Solver PR#{pr_number} flagged as copy (similarity={copy_results[pr_key].similarity:.2f}), '

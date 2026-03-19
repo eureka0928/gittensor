@@ -136,16 +136,6 @@ async def get_rewards(
     # Adjust scores for duplicate accounts
     detect_and_penalize_miners_sharing_github(miner_evaluations)
 
-    # Detect cross-miner copying for open issue-bounty PR reporting
-    from gittensor.validator.oss_contributions.similarity import (
-        clear_pr_file_contents,
-        detect_cross_miner_copies,
-    )
-
-    copy_results = detect_cross_miner_copies(miner_evaluations)
-    clear_pr_file_contents(miner_evaluations)
-    self._copy_detection_results = copy_results
-
     # Finalize scores: apply pioneer dividends, credibility, sum totals, deduct collateral
     finalize_miner_scores(miner_evaluations)
 

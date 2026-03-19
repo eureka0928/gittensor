@@ -10,7 +10,7 @@ import pytest
 
 from gittensor.classes import FileChange, Issue, MinerEvaluation, PRState, PullRequest
 from gittensor.utils.github_api_tools import FileContentPair
-from gittensor.validator.oss_contributions.similarity import (
+from gittensor.validator.issue_competitions.similarity import (
     _build_pr_groups,
     _calculate_copy_penalty,
     _counter_jaccard,
