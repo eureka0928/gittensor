@@ -234,7 +234,8 @@ def _cap_group_for_comparison(prs: List[PullRequest]) -> List[PullRequest]:
 
 
 def _origin_sort_key(pr: PullRequest) -> Tuple:
-    return (pr.created_at, pr.merged_at is None, pr.merged_at or pr.created_at, pr.number)
+    ts = pr.head_committed_at or pr.created_at
+    return (ts, pr.merged_at is None, pr.merged_at or ts, pr.number)
 
 
 def _compare_pr_pair(pr_a: PullRequest, pr_b: PullRequest) -> Optional[SimilarityResult]:
@@ -362,9 +363,19 @@ def _determine_originator(
     pr_a: PullRequest,
     pr_b: PullRequest,
 ) -> Tuple[PullRequest, PullRequest]:
-    """Earlier created_at wins. Tie-break: merged > open > lower PR number."""
-    if pr_a.created_at != pr_b.created_at:
-        return (pr_a, pr_b) if pr_a.created_at < pr_b.created_at else (pr_b, pr_a)
+    """Whoever pushed code most recently is the copy.
+
+    Uses head_committed_at (latest commit date) to detect force-push griefing:
+    if a miner opens a PR early but later force-pushes copied code, their
+    head_committed_at will be newer, correctly marking them as the copy.
+
+    Tie-break chain: merged > open > earlier created_at > lower PR number.
+    """
+    ts_a = pr_a.head_committed_at or pr_a.created_at
+    ts_b = pr_b.head_committed_at or pr_b.created_at
+
+    if ts_a != ts_b:
+        return (pr_a, pr_b) if ts_a < ts_b else (pr_b, pr_a)
 
     if pr_a.merged_at and pr_b.merged_at:
         if pr_a.merged_at != pr_b.merged_at:
@@ -373,6 +384,9 @@ def _determine_originator(
         return (pr_a, pr_b)
     elif pr_b.merged_at:
         return (pr_b, pr_a)
+
+    if pr_a.created_at != pr_b.created_at:
+        return (pr_a, pr_b) if pr_a.created_at < pr_b.created_at else (pr_b, pr_a)
 
     return (pr_a, pr_b) if pr_a.number <= pr_b.number else (pr_b, pr_a)
 

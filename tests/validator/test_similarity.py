@@ -329,6 +329,32 @@ class TestTemporalOrdering:
         assert results[copy_key].original_pr_number == 1
         assert results[copy_key].original_uid == 1
 
+    def test_force_push_griefing_detected(self):
+        """Miner A opens PR first but force-pushes copied code later — A should be flagged as copy."""
+        now = datetime.now(timezone.utc)
+        patch = '@@ -1,3 +1,5 @@\n+def solve():\n+    return 42\n'
+
+        # A created PR 5 hours ago, but force-pushed (new commit) 10 minutes ago
+        pr_a = _make_pr(uid=1, number=1, patches={'src/main.py': patch}, created_at=now - timedelta(hours=5))
+        pr_a.head_committed_at = now - timedelta(minutes=10)
+
+        # B created PR 1 hour ago, committed at that time
+        pr_b = _make_pr(uid=2, number=2, patches={'src/main.py': patch}, created_at=now - timedelta(hours=1))
+        pr_b.head_committed_at = now - timedelta(hours=1)
+
+        pr_a.issues = [_make_issue(99, pr_a, title='Griefing')]
+        pr_b.issues = [_make_issue(99, pr_b, title='Griefing')]
+
+        evals = {1: _make_eval(1, [pr_a]), 2: _make_eval(2, [pr_b])}
+        results = detect_cross_miner_copies(evals)
+
+        assert len(results) == 1
+        # A is the copy (newer head_committed_at), B is the original
+        copy_key = ('owner/repo', 1)
+        assert copy_key in results
+        assert results[copy_key].original_pr_number == 2
+        assert results[copy_key].original_uid == 2
+
     def test_tiebreak_merged_over_not(self):
         now = datetime.now(timezone.utc)
         pr_a = PullRequest(

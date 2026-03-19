@@ -51,8 +51,13 @@ QUERY = """
               lastEditedAt
               bodyText
               state
-              commits {
+              commits(last: 1) {
                 totalCount
+                nodes {
+                  commit {
+                    committedDate
+                  }
+                }
               }
               repository {
                 name

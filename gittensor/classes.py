@@ -196,6 +196,7 @@ class PullRequest:
     last_edited_at: Optional[datetime] = None
     head_ref_oid: Optional[str] = None
     base_ref_oid: Optional[str] = None
+    head_committed_at: Optional[datetime] = None  # committedDate of the latest commit
     file_contents: Optional[Dict[str, FileContentPair]] = None
 
     def set_file_changes(self, file_changes: List[FileChange]) -> None:
@@ -286,6 +287,13 @@ class PullRequest:
         )
         merged_at = parse_github_timestamp_to_cst(pr_data['mergedAt']) if is_merged else None
 
+        # Extract committedDate from the last commit node
+        commit_nodes = pr_data.get('commits', {}).get('nodes', [])
+        last_commit_date_raw = commit_nodes[-1]['commit']['committedDate'] if commit_nodes else None
+        head_committed_at = (
+            parse_github_timestamp_to_cst(last_commit_date_raw) if last_commit_date_raw else None
+        )
+
         return cls(
             number=pr_data['number'],
             repository_full_name=repository_full_name,
@@ -306,6 +314,7 @@ class PullRequest:
             last_edited_at=last_edited_at,
             head_ref_oid=pr_data.get('headRefOid'),
             base_ref_oid=pr_data.get('baseRefOid'),
+            head_committed_at=head_committed_at,
         )
 
 
